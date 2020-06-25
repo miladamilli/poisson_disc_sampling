@@ -1,21 +1,33 @@
-# PoissonDiscSampling
+# Poisson Disc Sampling (in 2 dimensions)
 
-**TODO: Add description**
+## About
 
-## Installation
+Poisson disc distribution produces evenly randomly distributed points, where
+all points are at least _minimum distance_ apart.
 
-If [available in Hex](https://hex.pm/docs/publish), the package can be installed
-by adding `poisson_disc_sampling` to your list of dependencies in `mix.exs`:
+![Poisson vs random](poisson_vs_random.jpg "Poisson vs random distribution")
 
-```elixir
-def deps do
-  [
-    {:poisson_disc_sampling, "~> 0.1.0"}
-  ]
-end
-```
+## Usage
 
-Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
-and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
-be found at [https://hexdocs.pm/poisson_disc_sampling](https://hexdocs.pm/poisson_disc_sampling).
+`PoissonDiscSampling.generate(min_dist, area_width, area_height, samples)`
 
+**min_dist** - minimum distance between points
+
+**samples** - maximum number of attempts to find a new suitable point in
+    each step (typically 30)
+
+The algorithm divides the area into a grid and places at most one point into
+each cell.
+
+Returns list of `{x, y}` points.
+
+## Sample app
+
+[Poisson & Colors](https://art-code.herokuapp.com/poisson-colors)
+
+## Further Reading
+
+- This implementation uses an algorithm by Robert Bridson:
+[Fast Poisson Disk Sampling in Arbitrary Dimensions](http://www.cs.ubc.ca/~rbridson/docs/bridson-siggraph07-poissondisk.pdf)
+
+- [https://www.jasondavies.com/poisson-disc/](https://www.jasondavies.com/poisson-disc/)
