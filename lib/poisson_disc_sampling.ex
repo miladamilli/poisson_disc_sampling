@@ -1,71 +1,77 @@
 defmodule PoissonDiscSampling do
   @moduledoc """
-  Generating evenly randomly distributed points using "Poisson disc sampling" algorithm.
+  Generates evenly randomly distributed points using "Poisson disc sampling" algorithm.
   """
+
+  defstruct [:min_dist, :area_width, :area_height, :samples, :cell_size]
 
   @dimensions 2
 
-  def generate(canvas_w, canvas_h, min_dist, samples) do
-    cell_size = min_dist / :math.sqrt(@dimensions)
-    random_point = {random(0, canvas_w), random(0, canvas_h)}
-    cells = Map.put(%{}, get_cell(random_point, cell_size), random_point)
+  @doc """
+  Returns list of points, each point is a two-element tuple `{x, y}`.
 
-    generate_points(cells, [random_point], cell_size, min_dist, samples, canvas_w, canvas_h)
+  Points are distributed in a rectangular area of dimensions
+  `area_width` and `area_height` and are at least minimum distance `min_dist` apart.
+
+  `Samples` is maximum number of attempts to find a new suitable point in each step
+  (typically 30).
+  """
+
+  @spec generate(non_neg_integer, non_neg_integer, non_neg_integer, non_neg_integer) :: [
+          {non_neg_integer, non_neg_integer}
+        ]
+  def generate(min_dist, area_width, area_height, samples) do
+    opts = %PoissonDiscSampling{
+      min_dist: min_dist,
+      samples: samples,
+      area_width: area_width,
+      area_height: area_height,
+      cell_size: min_dist / :math.sqrt(@dimensions)
+    }
+
+    random_point = {random(0, area_width), random(0, area_height)}
+
+    generate_points([random_point], %{}, opts)
   end
 
-  defp generate_points(cells, [], _, _, _, _, _) do
-    cells |> Map.values()
+  defp generate_points([], cells, _) do
+    Map.values(cells)
   end
 
-  defp generate_points(
-         cells,
-         [point | active_points],
-         cell_size,
-         min_dist,
-         samples,
-         canvas_w,
-         canvas_h
-       ) do
-    active_candidates = generate_samples(point, samples, min_dist, canvas_w, canvas_h)
+  defp generate_points([point | active_points], cells, opts) do
+    new_active_points = generate_samples(point, opts)
 
-    {cells, active} = process_active_points(cells, active_candidates, [], cell_size, min_dist)
+    {cells, new_active_points} =
+      process_new_active_points(new_active_points, cells, active_points, opts)
 
-    generate_points(
-      cells,
-      active_points ++ active,
-      cell_size,
-      min_dist,
-      samples,
-      canvas_w,
-      canvas_h
-    )
+    generate_points(new_active_points, cells, opts)
   end
 
-  defp generate_samples({x, y}, samples, min_dist, canvas_w, canvas_h) do
-    Enum.map(0..samples, fn _ ->
-      {rand_x, rand_y} = monte_carlo(min_dist)
+  defp generate_samples({x, y}, opts) do
+    Enum.map(0..opts.samples, fn _ ->
+      {rand_x, rand_y} = monte_carlo(opts.min_dist)
       {x + rand_x, y + rand_y}
     end)
-    |> Enum.filter(&in_canvas?(&1, canvas_w, canvas_h))
   end
 
-  defp process_active_points(cells, [], active, _, _) do
+  defp process_new_active_points([], cells, active, _) do
     {cells, active}
   end
 
-  defp process_active_points(cells, [point | points], active, cell_size, min_dist) do
-    if has_minimal_distance?(point, cells, cell_size, min_dist) do
-      cell = get_cell(point, cell_size)
+  defp process_new_active_points([point | points], cells, active, opts) do
+    if inside_area?(point, opts.area_width, opts.area_height) &&
+         has_min_distance?(point, cells, opts) do
+      cell = get_cell(point, opts.cell_size)
       cells = Map.put(cells, cell, point)
-      process_active_points(cells, points, [point | active], cell_size, min_dist)
+      process_new_active_points(points, cells, [point | active], opts)
     else
-      process_active_points(cells, points, active, cell_size, min_dist)
+      process_new_active_points(points, cells, active, opts)
     end
   end
 
-  defp has_minimal_distance?(point, cells, cell_size, min_dist) do
-    neighbouring_points = neighbour_points(point, cells, cell_size)
-    min_dist_from_neighbours?(point, neighbouring_points, min_dist)
+  defp has_min_distance?(point, cells, opts) do
+    neighbouring_points = neighbouring_points(point, cells, opts.cell_size)
+    min_dist_from_neighbours?(point, neighbouring_points, opts.min_dist)
   end
 
   defp min_dist_from_neighbours?(point, neighbouring_points, min_dist) do
@@ -76,25 +82,28 @@ defmodule PoissonDiscSampling do
     min_dist < :math.sqrt((nx - x) * (nx - x) + (ny - y) * (ny - y))
   end
 
-  defp neighbour_points(point, cells, cell_size) do
+  defp neighbouring_points(point, cells, cell_size) do
     {col, row} = get_cell(point, cell_size)
 
     # -1..1 could be enough, but there are some corner cases
-    for i <- -2..2, j <- -2..2, point = cells[{col + i, row + j}], not is_nil(point) do
+    for i <- -2..2, j <- -2..2, point = cells[{col + i, row + j}] do
       point
     end
   end
 
-  defp in_canvas?({x, y}, canvas_w, canvas_h) do
-    x >= 0 && x <= canvas_w && y >= 0 && y <= canvas_h
+  defp inside_area?({x, y}, area_width, area_height) do
+    x >= 0 && x <= area_width && y >= 0 && y <= area_height
   end
 
   defp monte_carlo(min_dist) do
     max_dist = 2 * min_dist
-    x = random(0, max_dist) * Enum.random([-1, 1])
-    y = random(0, max_dist) * Enum.random([-1, 1])
+    {x, y} = random_point_around(min_dist)
     r = :math.sqrt(x * x + y * y)
     if r >= min_dist and r <= max_dist, do: {x, y}, else: monte_carlo(min_dist)
+  end
+
+  defp random_point_around(dist) do
+    {random(0, dist) * Enum.random([-1, 1]), random(0, dist) * Enum.random([-1, 1])}
   end
 
   defp random(from, to) do
